@@ -24,4 +24,3 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.16.5",
 ]
-just 
