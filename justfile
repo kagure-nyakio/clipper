@@ -1,3 +1,5 @@
+set working-directory := 'backend'
+
 default:
     @just --list
     
@@ -6,7 +8,7 @@ install:
     uv sync --frozen
 
 format: install
-    uv run ruff format --check .
+    uv run ruff check --fix . && uv run ruff format --check .
 
 lint: install
     uv run ruff check .

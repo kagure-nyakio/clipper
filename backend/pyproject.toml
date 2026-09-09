@@ -1,13 +1,14 @@
 [project]
 name = "clipper"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "AI video clipper"
 authors = [
     { name = "kagure-nyakio", email = "kagurenyakio@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "ffmpeg-python>=0.2.0",
+]
 
 [project.scripts]
 clipper = "clipper:main"
@@ -15,6 +16,10 @@ clipper = "clipper:main"
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
+
+[[tool.mypy.overrides]]
+module = ["ffmpeg.*"]
+ignore_missing_imports = true
 
 [dependency-groups]
 dev = [
