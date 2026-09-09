@@ -61,7 +61,7 @@ jobs:
       - uses: extractions/setup-just@v2
       - run: just lock-check
 
-   test:
+  test:
     name: Test
     runs-on: ubuntu-latest
     steps:
