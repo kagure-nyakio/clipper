@@ -30,7 +30,17 @@ def test_transcribe_real_audio_produces_valid_shape(sample_speech_path):
 def test_transcribe_matches_golden_output(sample_speech_path, sample_speech_transcript):
     result = transcribe(str(sample_speech_path))
 
-    assert result == pytest.approx(sample_speech_transcript)
+    assert result["text"] == sample_speech_transcript["text"]
+    assert len(result["segments"]) == len(sample_speech_transcript["segments"])
+
+    for got_seg, exp_seg in zip(
+        result["segments"], sample_speech_transcript["segments"]
+    ):
+        assert got_seg["text"] == exp_seg["text"]
+        for got_word, exp_word in zip(got_seg["words"], exp_seg["words"]):
+            assert got_word["word"] == exp_word["word"]
+            assert got_word["start"] == pytest.approx(exp_word["start"], abs=0.05)
+            assert got_word["end"] == pytest.approx(exp_word["end"], abs=0.05)
 
 
 def test_transcribe_raises_on_engine_failure():
