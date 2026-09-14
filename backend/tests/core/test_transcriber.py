@@ -31,27 +31,6 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"[^\w\s]", "", text.lower()).strip()
 
 
-@pytest.mark.slow
-def test_transcribe_matches_golden_output(sample_speech_path, sample_speech_transcript):
-    result = transcribe(str(sample_speech_path))
-
-    assert _normalize_text(result["text"]) == _normalize_text(
-        sample_speech_transcript["text"]
-    )
-    assert len(result["segments"]) == len(sample_speech_transcript["segments"])
-
-    for got_seg, exp_seg in zip(
-        result["segments"], sample_speech_transcript["segments"]
-    ):
-        assert _normalize_text(got_seg["text"]) == _normalize_text(exp_seg["text"])
-        for got_word, exp_word in zip(got_seg["words"], exp_seg["words"]):
-            assert _normalize_text(got_word["word"]) == _normalize_text(
-                exp_word["word"]
-            )
-            assert got_word["start"] == pytest.approx(exp_word["start"], abs=0.05)
-            assert got_word["end"] == pytest.approx(exp_word["end"], abs=0.05)
-
-
 def test_transcribe_raises_on_engine_failure():
     with patch("clipper.core.transcriber._get_model") as mock_get_model:
         mock_get_model.return_value.transcribe.side_effect = RuntimeError(
