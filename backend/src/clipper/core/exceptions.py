@@ -26,3 +26,9 @@ class TranscriptionError(ClipperError):
     """Raised when the ASR engine fails to transcribe an audio file."""
 
     status_code = 500
+
+
+class LLMError(ClipperError):
+    """Raise when call to LLM fails"""
+
+    status_code = 502

@@ -9,6 +9,9 @@ requires-python = ">=3.12"
 dependencies = [
     "faster-whisper>=1.2.1",
     "ffmpeg-python>=0.2.0",
+    "openai>=3.14.1",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.3",
 ]
 
 [project.scripts]
@@ -36,3 +39,4 @@ dev = [
 markers = [
     "slow: tests that load a real model or run real transcription",
 ]
+pythonpath = ["."]
