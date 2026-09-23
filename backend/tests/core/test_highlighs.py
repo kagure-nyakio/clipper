@@ -9,6 +9,8 @@ from clipper.core.highlights import (
     analyze_candidate,
     build_candidate_windows,
     deduplicate_candidates,
+    extract_clips_from_video,
+    generate_srt_for_candidate,
 )
 
 
@@ -104,3 +106,76 @@ def test_deduplicate_keeps_highest_confidence_and_drops_overlaps():
 
     kept_texts = {c.text for c, _ in result}
     assert kept_texts == {"b", "c"}
+
+
+def test_generate_srt_retimes_and_clips_segments(tmp_path):
+    candidate = Candidate(text="hello there", start=10.0, end=15.0)
+    transcript = {
+        "segments": [
+            {"text": "too early", "start": 0.0, "end": 5.0},
+            {"text": "hello there", "start": 10.0, "end": 12.0},
+            {"text": "general kenobi", "start": 12.5, "end": 16.0},
+        ]
+    }
+    srt_path = tmp_path / "highlight.srt"
+
+    generate_srt_for_candidate(candidate, transcript, str(srt_path))
+
+    content = srt_path.read_text()
+    assert "00:00:00,000 --> 00:00:02,000" in content
+    assert "00:00:02,500 --> 00:00:05,000" in content
+    assert "hello there" in content
+    assert "too early" not in content
+
+
+def test_extract_clips_uses_precomputed_highlights_without_subtitles():
+    candidate = Candidate(text="a strong moment", start=12.5, end=42.75)
+    verdict = HighlightVerdict(
+        reasoning="Strong hook.",
+        is_clip_worthy=True,
+        confidence=0.9,
+        suggested_hook=None,
+    )
+
+    with patch("clipper.core.highlights.create_clip") as create_clip:
+        paths = extract_clips_from_video(
+            "input.mp4",
+            [(candidate, verdict)],
+            "clips",
+            precise=False,
+            burn_subtitles=False,
+        )
+
+    assert paths == ["clips/highlight_1.mp4"]
+    create_clip.assert_called_once_with(
+        "input.mp4",
+        "00:00:12.500",
+        "00:00:42.750",
+        "clips/highlight_1.mp4",
+        precise=False,
+    )
+
+
+def test_extract_clips_detects_highlights_and_burns_subtitles(tmp_path):
+    candidate = Candidate(text="a strong moment", start=0.0, end=10.0)
+    verdict = HighlightVerdict(
+        reasoning="Strong hook.",
+        is_clip_worthy=True,
+        confidence=0.9,
+        suggested_hook=None,
+    )
+    transcript = {"segments": [{"text": "a strong moment", "start": 0.0, "end": 10.0}]}
+
+    with (
+        patch(
+            "clipper.core.highlights.detect_highlights",
+            return_value=[(candidate, verdict)],
+        ),
+        patch("clipper.core.highlights.create_clip") as create_clip,
+        patch("clipper.core.highlights.add_subtitles") as add_subtitles,
+    ):
+        paths = extract_clips_from_video("input.mp4", transcript, str(tmp_path))
+
+    assert paths == [f"{tmp_path}/highlight_1.mp4"]
+    create_clip.assert_called_once()
+    add_subtitles.assert_called_once()

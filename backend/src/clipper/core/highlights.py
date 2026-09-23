@@ -1,9 +1,12 @@
+from pathlib import Path
+
 from openai import OpenAI
 from pydantic import BaseModel
 
 from clipper.config import OPENAI_API_KEY
 from clipper.core.exceptions import LLMError
-from clipper.core.media import create_clip
+from clipper.core.media import add_subtitles, create_clip
+from clipper.core.transcriber import Segment, Transcript
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -22,7 +25,7 @@ class HighlightVerdict(BaseModel):
 
 
 def build_candidate_windows(
-    transcript: dict, window_seconds: float = 45, step_seconds: float = 20
+    transcript: Transcript, window_seconds: float = 45, step_seconds: float = 20
 ) -> list[Candidate]:
     segments = transcript["segments"]
     candidates = []
@@ -120,7 +123,7 @@ def _overlap_ratio(a: Candidate, b: Candidate) -> float:
 
 def enforce_duration_bounds(
     candidate: Candidate,
-    segments: list[dict],
+    segments: list[Segment],
     min_seconds: float = 30,
     max_seconds: float = 60,
 ) -> Candidate:
@@ -168,7 +171,7 @@ def rank_highlights(
 
 
 def detect_highlights(
-    transcript: dict,
+    transcript: Transcript,
     window_seconds: float = 45,
     step_seconds: float = 20,
     min_confidence: float = 0.7,
@@ -187,18 +190,90 @@ def _seconds_to_timestamp(seconds: float) -> str:
     return f"{int(h):02d}:{int(m):02d}:{s:06.3f}"
 
 
+def _srt_timestamp(seconds: float) -> str:
+    """Format seconds as an SRT timestamp without rounding into an invalid value."""
+    total_milliseconds = max(0, round(seconds * 1000))
+    hours, remainder = divmod(total_milliseconds, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    whole_seconds, milliseconds = divmod(remainder, 1_000)
+    return f"{hours:02d}:{minutes:02d}:{whole_seconds:02d},{milliseconds:03d}"
+
+
+def generate_srt_for_candidate(
+    candidate: Candidate, transcript: Transcript, output_srt_path: str
+) -> str:
+    """Write subtitles intersecting ``candidate``, shifted to its time zero."""
+    relevant_segments = [
+        segment
+        for segment in transcript["segments"]
+        if segment["start"] < candidate.end and segment["end"] > candidate.start
+    ]
+
+    lines: list[str] = []
+    for number, segment in enumerate(relevant_segments, start=1):
+        start = max(segment["start"], candidate.start) - candidate.start
+        end = min(segment["end"], candidate.end) - candidate.start
+        lines.extend(
+            [
+                str(number),
+                f"{_srt_timestamp(start)} --> {_srt_timestamp(end)}",
+                segment["text"].strip(),
+                "",
+            ]
+        )
+
+    Path(output_srt_path).write_text("\n".join(lines), encoding="utf-8")
+    return output_srt_path
+
+
 def extract_clips_from_video(
-    video_path: str, transcript: dict, output_dir: str, precise: bool = True
+    video_path: str,
+    highlights: list[tuple[Candidate, HighlightVerdict]] | Transcript,
+    output_dir: str,
+    precise: bool = True,
+    burn_subtitles: bool = True,
+    min_confidence: float = 0.7,
+    max_highlights: int = 5,
 ) -> list[str]:
+    """Create clips, optionally burning in subtitles.
+
+    ``highlights`` may be pre-scored results, or a transcript dictionary. The
+    latter form detects highlights using the supplied ranking options.
+    """
+    transcript: Transcript | None
+    scored_highlights: list[tuple[Candidate, HighlightVerdict]]
+    if isinstance(highlights, dict):
+        transcript = highlights
+        scored_highlights = detect_highlights(
+            transcript,
+            min_confidence=min_confidence,
+            max_highlights=max_highlights,
+        )
+    else:
+        transcript = None
+        scored_highlights = highlights
+
     output_paths = []
-    for i, (candidate, verdict) in enumerate(detect_highlights(transcript)):
-        output_path = f"{output_dir}/highlight_{i + 1}.mp4"
+    for i, (candidate, _) in enumerate(scored_highlights, start=1):
+        output_path = f"{output_dir}/highlight_{i}.mp4"
+        raw_path = (
+            f"{output_dir}/highlight_{i}_raw.mp4" if burn_subtitles else output_path
+        )
         create_clip(
             video_path,
             _seconds_to_timestamp(candidate.start),
             _seconds_to_timestamp(candidate.end),
-            output_path,
+            raw_path,
             precise=precise,
         )
+
+        if burn_subtitles:
+            if transcript is None:
+                raise ValueError(
+                    "A transcript is required when burn_subtitles is enabled."
+                )
+            srt_path = f"{output_dir}/highlight_{i}.srt"
+            generate_srt_for_candidate(candidate, transcript, srt_path)
+            add_subtitles(raw_path, output_path, srt_path)
         output_paths.append(output_path)
     return output_paths

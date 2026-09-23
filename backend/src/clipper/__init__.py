@@ -1,2 +1,5 @@
 def main() -> None:
-    print("clipper CLI — not yet implemented")
+    """Backward-compatible package entry point."""
+    from clipper.cli import main as cli_main
+
+    cli_main()
