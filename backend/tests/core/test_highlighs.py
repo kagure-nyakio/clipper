@@ -47,10 +47,10 @@ def test_analyze_candidate_returns_parsed_verdict():
     fake_completion.choices[0].message.refusal = None
     fake_completion.choices[0].message.parsed = fake_verdict
 
-    with patch(
-        "clipper.core.highlights.client.chat.completions.parse",
-        return_value=fake_completion,
-    ):
+    fake_client = MagicMock()
+    fake_client.chat.completions.parse.return_value = fake_completion
+
+    with patch("clipper.core.highlights._get_client", return_value=fake_client):
         result = analyze_candidate(Candidate(text="...", start=0, end=45))
 
     assert result.is_clip_worthy is True
@@ -63,11 +63,11 @@ def test_analyze_candidate_raises_on_missing_parsed():
     fake_completion.choices[0].message.refusal = None
     fake_completion.choices[0].message.parsed = None
 
+    fake_client = MagicMock()
+    fake_client.chat.completions.parse.return_value = fake_completion
+
     with (
-        patch(
-            "clipper.core.highlights.client.chat.completions.parse",
-            return_value=fake_completion,
-        ),
+        patch("clipper.core.highlights._get_client", return_value=fake_client),
         pytest.raises(LLMError, match="no parsed content"),
     ):
         analyze_candidate(Candidate(text="...", start=0, end=45))
@@ -78,11 +78,11 @@ def test_analyze_candidate_raises_on_refusal():
     fake_completion.choices[0].finish_reason = "stop"
     fake_completion.choices[0].message.refusal = "cannot evaluate this content"
 
+    fake_client = MagicMock()
+    fake_client.chat.completions.parse.return_value = fake_completion
+
     with (
-        patch(
-            "clipper.core.highlights.client.chat.completions.parse",
-            return_value=fake_completion,
-        ),
+        patch("clipper.core.highlights._get_client", return_value=fake_client),
         pytest.raises(LLMError, match="refused"),
     ):
         analyze_candidate(Candidate(text="...", start=0, end=45))

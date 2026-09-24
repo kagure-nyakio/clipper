@@ -3,12 +3,15 @@ from pathlib import Path
 from openai import OpenAI
 from pydantic import BaseModel
 
-from clipper.config import OPENAI_API_KEY
+from clipper.config import get_openai_api_key
 from clipper.core.exceptions import LLMError
 from clipper.core.media import add_subtitles, create_clip
 from clipper.core.transcriber import Segment, Transcript
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+
+def _get_client() -> OpenAI:
+    """Create an OpenAI client only for a real highlight-analysis request."""
+    return OpenAI(api_key=get_openai_api_key())
 
 
 class Candidate(BaseModel):
@@ -60,7 +63,7 @@ def build_candidate_windows(
 
 
 def analyze_candidate(candidate: Candidate) -> HighlightVerdict:
-    completion = client.chat.completions.parse(
+    completion = _get_client().chat.completions.parse(
         model="gpt-4o-mini",
         temperature=0,
         messages=[
